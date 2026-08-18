@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>DeepSeek Harness - Setup</title>
+<style>
+  :root {
+    --blue: #4d6bfe;
+    --blue-dark: #3a52d8;
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --border: #e5e9f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 32px 40px;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 22px;
+  }
+  header img { width: 44px; height: 44px; border-radius: 10px; }
+  header h1 { font-size: 22px; font-weight: 600; flex: 1; }
+  .lang { display: flex; gap: 8px; }
+  .lang button {
+    border: 1px solid var(--border); background: var(--card);
+    padding: 5px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 13px; color: var(--muted);
+  }
+  .lang button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    display: inline-block; padding: 3px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+  }
+  .badge.ok { background: #e8f7ee; color: var(--ok); }
+  .badge.warn { background: #fdf1e0; color: var(--warn); }
+  .badge.blue { background: #e9edff; color: var(--blue-dark); }
+
+  ol.steps { margin: 10px 0 6px 20px; }
+  ol.steps li { margin-bottom: 10px; line-height: 1.6; }
+  code {
+    background: #eef1f8; padding: 2px 7px; border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace; font-size: 13px;
+  }
+  .cmd {
+    background: #101827; color: #d7e3ff; border-radius: 10px;
+    padding: 12px 14px; font-family: Consolas, "Courier New", monospace;
+    font-size: 13px; overflow-x: auto; white-space: pre-wrap;
+    word-break: break-all; margin: 8px 0;
+  }
+  .copy-btn {
+    margin-top: 6px; border: 1px solid var(--border); background: var(--card);
+    padding: 6px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  .copy-btn:hover { background: #f0f2fa; }
+
+  .key-row { display: flex; gap: 10px; margin: 12px 0; }
+  .key-row input {
+    flex: 1; padding: 11px 14px; border: 1px solid var(--border);
+    border-radius: 10px; font-size: 14px; outline: none;
+  }
+  .key-row input:focus { border-color: var(--blue); }
+  .btn-primary {
+    background: var(--blue); color: #fff; border: none;
+    padding: 11px 22px; border-radius: 10px; font-size: 14px;
+    cursor: pointer; font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--blue-dark); }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+
+  .security-box { background: #f7f9ff; border: 1px solid #dbe3ff; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+  .security-box strong { color: var(--blue-dark); }
+  pre.code {
+    background: #101827; color: #c9d6f2; border-radius: 10px;
+    padding: 14px 16px; font-family: Consolas, "Courier New", monospace;
+    font-size: 12px; line-height: 1.55; overflow-x: auto; margin-top: 12px;
+  }
+  .status-line { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 14px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .footer-btn { margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="icon.png" alt="DSH">
+  <h1 data-i18n="title">DeepSeek Harness</h1>
+  <div class="lang">
+    <button id="btnZh" class="active">中文</button>
+    <button id="btnEn">English</button>
+  </div>
+</header>
+
+<!-- Status -->
+<div class="card">
+  <h2><span data-i18n="statusTitle">环境检测</span> <span id="statusBadge" class="badge warn">检测中…</span></h2>
+  <div class="status-line"><span class="dot" id="dotDsh"></span><span data-i18n="statusDsh">dsh 运行环境</span></div>
+  <div class="status-line"><span class="dot" id="dotKey"></span><span data-i18n="statusKey">API Key</span></div>
+  <div class="hint" id="dshPathHint" style="display:none"></div>
+</div>
+
+<!-- Install steps (shown when dsh is missing) -->
+<div class="card" id="installCard" style="display:none">
+  <h2><span data-i18n="installTitle">第一步：安装 dsh 运行环境</span></h2>
+  <ol class="steps">
+    <li><span data-i18n="stepNode">安装 Node.js（dsh 的运行环境）：</span>
+      <a href="https://nodejs.org" target="_blank" data-i18n="stepNodeLink">https://nodejs.org</a>
+      <span data-i18n="stepNodeTip">（下载 LTS 版，一路下一步）</span></li>
+    <li><span data-i18n="stepCmd">打开 PowerShell，粘贴以下命令（会自动创建 D:\dsh-app 并安装 dsh）：</span>
+      <div class="cmd" id="installCmd">cd D:\
+mkdir dsh-app
+cd dsh-app
+npm init -y
+npm install @deepseek-ai/dsh --registry=https://registry.npmmirror.com</div>
+      <button class="copy-btn" id="copyInstall" data-i18n="copyBtn">复制命令</button>
+    </li>
+    <li><span data-i18n="stepDone">安装完成后点击下方「重新检测」，或重启本应用。</span></li>
+  </ol>
+</div>
+
+<!-- API key -->
+<div class="card">
+  <h2><span data-i18n="keyTitle">第二步：填写 DeepSeek API Key</span> <span class="badge blue" id="keyState"></span></h2>
+  <div class="key-row">
+    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+    <button class="btn-primary" id="saveKey" data-i18n="saveBtn">保存</button>
+  </div>
+  <div class="hint" id="saveResult"></div>
+  <div class="hint" data-i18n="keyHint">还没有 Key？打开 platform.deepseek.com →「API Keys」→「创建新密钥」→ 复制。</div>
+</div>
+
+<!-- Security -->
+<div class="card">
+  <h2><span data-i18n="secTitle">关于你的 API Key 安全</span></h2>
+  <div class="security-box">
+    <strong data-i18n="secClaim">🔒 你的 Key 只保存在本机，绝不上传任何服务器</strong>
+    <p class="hint" data-i18n="secDetail">Key 使用 Windows 系统级加密（DPAPI）存到你的用户目录，只通过环境变量注入本地 dsh 进程。没有网络调用、没有云同步、不会出现在任何日志里。下面是处理 Key 的后端代码，完全开源，可自行核对：</p>
+  </div>
+  <pre class="code">// main.js —— API Key 加密存储（Windows DPAPI / safeStorage）
+function settingsFile() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+// 保存：本机加密后落盘
+if (safeStorage.isEncryptionAvailable()) {
+  data.apiKeyEnc = safeStorage.encryptString(key).toString('base64');
+}
+// 读取：仅本机解密
+data.apiKey = safeStorage.decryptString(Buffer.from(data.apiKeyEnc, 'base64'));
+// 注入本地 dsh 进程（仅本机环回）
+env.DEEPSEEK_API_KEY = key;</pre>
+</div>
+
+<div class="footer-btn">
+  <button class="btn-primary" id="restartBtn" data-i18n="restartBtn">重新检测</button>
+</div>
+
+<script>
+// ---- i18n dictionary ----
+const I18N = {
+  zh: {
+    title: 'DeepSeek Harness', statusTitle: '环境检测',
+    statusDsh: 'dsh 运行环境', statusKey: 'API Key',
+    installTitle: '第一步：安装 dsh 运行环境',
+    stepNode: '① 安装 Node.js（dsh 的运行环境）：',
+    stepNodeLink: 'https://nodejs.org', stepNodeTip: '（下载 LTS 版，一路下一步）',
+    stepCmd: '② 打开 PowerShell，粘贴以下命令（会自动创建 D:\\dsh-app 并安装 dsh）：',
+    copyBtn: '复制命令', stepDone: '③ 安装完成后点击下方「重新检测」，或重启本应用。',
+    keyTitle: '第二步：填写 DeepSeek API Key',
+    saveBtn: '保存', keyHint: '还没有 Key？打开 platform.deepseek.com →「API Keys」→「创建新密钥」→ 复制。',
+    secTitle: '关于你的 API Key 安全',
+    secClaim: '🔒 你的 Key 只保存在本机，绝不上传任何服务器',
+    secDetail: 'Key 使用 Windows 系统级加密（DPAPI）存到你的用户目录，只通过环境变量注入本地 dsh 进程。没有网络调用、没有云同步、不会出现在任何日志里。下面是处理 Key 的后端代码，完全开源，可自行核对：',
+    restartBtn: '重新检测',
+    statusChecking: '检测中…', statusOk: '已就绪', statusMissing: '未安装',
+    keyConfigured: '已配置', keyNotConfigured: '未配置',
+    keySaved: '✅ 已加密保存到：', encryptionOn: '（已启用系统级加密）',
+    saveFail: '❌ 保存失败，请重试',
+    dshPathLabel: 'dsh 目录：',
+    keyPathLabel: 'Key 存储位置：',
+  },
+  en: {
+    title: 'DeepSeek Harness', statusTitle: 'Environment Check',
+    statusDsh: 'dsh runtime', statusKey: 'API Key',
+    installTitle: 'Step 1: Install the dsh runtime',
+    stepNode: '① Install Node.js (runtime for dsh): ',
+    stepNodeLink: 'https://nodejs.org', stepNodeTip: '(download LTS, next-next-next)',
+    stepCmd: '② Open PowerShell and paste this (creates D:\\dsh-app and installs dsh):',
+    copyBtn: 'Copy', stepDone: '③ Click "Re-check" below or restart this app when done.',
+    keyTitle: 'Step 2: Enter your DeepSeek API Key',
+    saveBtn: 'Save', keyHint: 'No key yet? Open platform.deepseek.com → "API Keys" → "Create new" → copy.',
+    secTitle: 'About your API Key security',
+    secClaim: '🔒 Your key stays on this machine only — never uploaded anywhere',
+    secDetail: 'The key is encrypted with Windows system-level encryption (DPAPI) into your user profile, injected into the local dsh process via an environment variable. No network calls, no cloud sync, no logs. The backend code that handles your key is fully open source below:',
+    restartBtn: 'Re-check',
+    statusChecking: 'Checking…', statusOk: 'Ready', statusMissing: 'Not installed',
+    keyConfigured: 'Configured', keyNotConfigured: 'Not configured',
+    keySaved: '✅ Encrypted and saved to: ', encryptionOn: ' (system-level encryption on)',
+    saveFail: '❌ Save failed, please retry',
+    dshPathLabel: 'dsh directory: ',
+    keyPathLabel: 'Key storage: ',
+  }
+};
+
+let lang = 'zh';
+function t(key) { return I18N[lang][key] || key; }
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.getElementById('btnZh').classList.toggle('active', lang === 'zh');
+  document.getElementById('btnEn').classList.toggle('active', lang === 'en');
+  refreshStatus();
+}
+document.getElementById('btnZh').onclick = () => { lang = 'zh'; applyLang(); };
+document.getElementById('btnEn').onclick = () => { lang = 'en'; applyLang(); };
+
+function setDot(id, ok) {
+  const dot = document.getElementById(id);
+  dot.className = 'dot ' + (ok ? 'ok' : 'warn');
+}
+
+async function refreshStatus() {
+  const badge = document.getElementById('statusBadge');
+  try {
+    const s = await window.dshAPI.getSetupStatus();
+    const badgeText = s.dshExists ? t('statusOk') : t('statusMissing');
+    badge.textContent = badgeText;
+    badge.className = 'badge ' + (s.dshExists ? 'ok' : 'warn');
+    setDot('dotDsh', s.dshExists);
+    setDot('dotKey', s.hasApiKey);
+
+    const hint = document.getElementById('dshPathHint');
+    hint.style.display = 'block';
+    hint.textContent = t('dshPathLabel') + s.dshApp + '  |  ' + t('keyPathLabel') + s.settingsPath;
+
+    document.getElementById('installCard').style.display = s.dshExists ? 'none' : 'block';
+
+    const keyState = document.getElementById('keyState');
+    keyState.textContent = s.hasApiKey ? t('keyConfigured') : t('keyNotConfigured');
+    keyState.className = 'badge ' + (s.hasApiKey ? 'ok' : 'warn');
+  } catch (e) {
+    badge.textContent = t('statusChecking');
+  }
+}
+
+document.getElementById('copyInstall').onclick = () => {
+  const text = document.getElementById('installCmd').textContent;
+  navigator.clipboard.writeText(text.trim()).then(() => {
+    document.getElementById('copyInstall').textContent = lang === 'zh' ? '已复制 ✓' : 'Copied ✓';
+    setTimeout(() => { document.getElementById('copyInstall').textContent = t('copyBtn'); }, 1500);
+  });
+};
+
+document.getElementById('saveKey').onclick = async () => {
+  const key = document.getElementById('apiKey').value.trim();
+  const el = document.getElementById('saveResult');
+  try {
+    const r = await window.dshAPI.saveApiKey(key);
+    el.textContent = (r.ok ? t('keySaved') + r.settingsPath + (r.encrypted ? t('encryptionOn') : '') : t('saveFail'));
+    el.style.color = r.ok ? '#16a34a' : '#dc2626';
+    refreshStatus();
+  } catch (e) {
+    el.textContent = t('saveFail');
+    el.style.color = '#dc2626';
+  }
+};
+
+document.getElementById('restartBtn').onclick = () => { window.dshAPI.restart(); };
+
+window.addEventListener('DOMContentLoaded', applyLang);
+</script>
+</body>
+</html>

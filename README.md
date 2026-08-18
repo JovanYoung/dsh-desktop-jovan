@@ -27,6 +27,32 @@ A lightweight **Electron shell** that wraps the local [DeepSeek Harness](https:/
 
 Download the latest installer from the [Releases page](https://github.com/JovanYoung/dsh-desktop2/releases/latest), run it, and launch "DeepSeek Harness" from your desktop shortcut.
 
+## First-time setup (new machine)
+
+The installer is only the **shell** — the dsh runtime and your API key are not bundled. On a fresh machine:
+
+1. **Install Node.js** from https://nodejs.org (LTS, next-next-next)
+2. Open **PowerShell** and run:
+   ```powershell
+   cd D:\
+   mkdir dsh-app
+   cd dsh-app
+   npm init -y
+   npm install @deepseek-ai/dsh --registry=https://registry.npmmirror.com
+   ```
+3. Launch "DeepSeek Harness" — it detects the missing runtime and opens an **in-app setup page** with the same steps, a copy-paste command, and an API key field
+4. Paste your API key from https://platform.deepseek.com (API Keys → Create new) and click **Save** → **Re-check**
+
+No manual config files needed — the shell reads defaults (`D:\dsh-app`, `D:\dsh-data`) out of the box.
+
+## Security
+
+Your API key is **encrypted at rest with Windows DPAPI** (`safeStorage`) in your per-user Electron data directory. It is only injected into the **local** dsh process via an environment variable:
+
+- 🔒 No network calls, no cloud sync, no logging
+- 🔒 The storage code is open source — see `main.js` (`writeSettings` / `readSettings`) and the setup page's "Security" section which renders the actual backend code
+- 🔒 `contextIsolation` is on; the setup page only reaches three whitelisted IPC calls (`save-api-key`, `get-setup-status`, `restart-app`)
+
 ## Build from source
 
 ```powershell

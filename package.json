@@ -22,6 +22,8 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "setup.html",
       "icon.png"
     ],
     "afterPack": "afterPack.js",

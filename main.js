@@ -1,6 +1,8 @@
 // DeepSeek Harness Desktop - Electron shell
 // Boots the local dsh web server, opens it in a native window, keeps it in tray.
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog } = require('electron');
+// If the dsh runtime is missing, shows an in-app guided setup page
+// (install steps + API key entry, stored encrypted via Windows DPAPI).
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, safeStorage } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -21,11 +23,63 @@ const URL = `http://127.0.0.1:${PORT}`;
 const ICON = path.join(__dirname, 'icon.png');
 
 let mainWindow = null;
+let setupWindow = null;
 let tray = null;
 let serverProc = null;
 let isQuitting = false;
 
-// Read DEEPSEEK_API_KEY the user may have filled into dsh-start.bat
+// ---------------------------------------------------------------------------
+// Local settings: the API key is stored ENCRYPTED with Windows DPAPI
+// (safeStorage) inside the per-user Electron data directory. It never leaves
+// this machine — no network call, no cloud sync. See the setup page
+// "Security / 安全" section for the exact code shown below.
+// ---------------------------------------------------------------------------
+function settingsFile() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function readSettings() {
+  try {
+    const data = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
+    if (data.apiKeyEnc && safeStorage.isEncryptionAvailable()) {
+      try {
+        data.apiKey = safeStorage.decryptString(Buffer.from(data.apiKeyEnc, 'base64'));
+      } catch (_) { /* corrupted payload -> ignore */ }
+    }
+    return data;
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeSettings(patch) {
+  let data = {};
+  try {
+    data = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
+  } catch (_) {}
+  if (patch.apiKey !== undefined) {
+    const key = String(patch.apiKey || '').trim();
+    if (key) {
+      if (safeStorage.isEncryptionAvailable()) {
+        // Encrypted at rest with the Windows user account (DPAPI)
+        data.apiKeyEnc = safeStorage.encryptString(key).toString('base64');
+        delete data.apiKey;
+      } else {
+        data.apiKey = key; // fallback only when DPAPI is unavailable
+      }
+    } else {
+      delete data.apiKeyEnc;
+      delete data.apiKey;
+    }
+    delete patch.apiKey;
+  }
+  Object.assign(data, patch);
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+  fs.writeFileSync(settingsFile(), JSON.stringify(data, null, 2));
+  return data;
+}
+
+// Read DEEPSEEK_API_KEY the user may have filled into dsh-start.bat (legacy)
 function readApiKeyFromBat() {
   try {
     const bat = fs.readFileSync(path.join(DSH_APP, 'dsh-start.bat'), 'utf8');
@@ -36,13 +90,26 @@ function readApiKeyFromBat() {
   }
 }
 
+// Effective key: shell settings (encrypted) first, then legacy bat file
+function resolveApiKey() {
+  const settings = readSettings();
+  if (settings.apiKey) return settings.apiKey;
+  return readApiKeyFromBat();
+}
+
+// Is the dsh runtime present under DSH_APP?
+function dshExists() {
+  return fs.existsSync(path.join(DSH_APP, 'node_modules', '.bin', 'dsh')) ||
+    fs.existsSync(path.join(DSH_APP, 'node_modules', '@deepseek-ai', 'dsh'));
+}
+
 // Boot the dsh web server as a child process
 function startDshServer() {
   const env = { ...process.env };
   env.NODE_OPTIONS = '';
   env.DSH_HOME = DSH_HOME;
   if (NODE_DIR) env.PATH = `${NODE_DIR};${env.PATH}`;
-  const key = readApiKeyFromBat();
+  const key = resolveApiKey();
   if (key) env.DEEPSEEK_API_KEY = key;
 
   serverProc = spawn('node_modules\\.bin\\dsh', ['web'], {
@@ -112,15 +179,41 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
   mainWindow.loadURL(URL);
 
-  // Closing the window hides to tray instead of quitting
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
       mainWindow.hide();
+    }
+  });
+}
+
+// Guided setup page shown when the dsh runtime is not installed
+function createSetupWindow() {
+  setupWindow = new BrowserWindow({
+    width: 900,
+    height: 760,
+    minWidth: 720,
+    minHeight: 560,
+    title: 'DeepSeek Harness - Setup',
+    autoHideMenuBar: true,
+    icon: ICON,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  setupWindow.loadFile(path.join(__dirname, 'setup.html'));
+
+  setupWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      setupWindow.hide();
     }
   });
 }
@@ -148,13 +241,38 @@ function createTray() {
   tray.on('click', () => showMainWindow());
 }
 
-// Bring the main window to front (used by tray and single-instance events)
+// Bring the active window to front (used by tray and single-instance events)
 function showMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  const win = mainWindow || setupWindow;
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
+
+// ---- IPC: minimal, whitelisted bridge for the setup page ----
+ipcMain.handle('save-api-key', (_e, apiKey) => {
+  writeSettings({ apiKey: String(apiKey || '') });
+  return {
+    ok: true,
+    settingsPath: settingsFile(),
+    encrypted: safeStorage.isEncryptionAvailable(),
+  };
+});
+
+ipcMain.handle('get-setup-status', () => ({
+  dshApp: DSH_APP,
+  dshExists: dshExists(),
+  hasApiKey: !!resolveApiKey(),
+  settingsPath: settingsFile(),
+  dshHome: DSH_HOME,
+  encryptionAvailable: safeStorage.isEncryptionAvailable(),
+}));
+
+ipcMain.handle('restart-app', () => {
+  app.relaunch();
+  app.exit(0);
+});
 
 // ---- Single instance: second launch focuses the existing window ----
 const gotTheLock = app.requestSingleInstanceLock();
@@ -166,18 +284,23 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
-    // Reuse an already-running dsh service if port 3080 is up (e.g. started
-    // from dsh-start.bat or another instance). Only boot our own otherwise.
     const alreadyUp = await probeServer();
     if (!alreadyUp) {
-      startDshServer();
-      try {
-        await waitForServer();
-      } catch (e) {
-        dialog.showErrorBox('dsh 启动失败', e.message);
+      if (dshExists()) {
+        startDshServer();
+        try {
+          await waitForServer();
+        } catch (e) {
+          dialog.showErrorBox('dsh 启动失败', e.message);
+        }
+        createWindow();
+      } else {
+        // dsh runtime missing -> in-app guided setup
+        createSetupWindow();
       }
+    } else {
+      createWindow();
     }
-    createWindow();
     createTray();
   });
 }

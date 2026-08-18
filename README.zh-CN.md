@@ -27,6 +27,32 @@
 
 前往 [Releases 页面](https://github.com/JovanYoung/dsh-desktop2/releases/latest) 下载最新安装包，运行安装后，从桌面快捷方式「DeepSeek Harness」启动即可。
 
+## 新电脑首次使用
+
+安装包只是**壳**——dsh 运行环境和你的 API Key 都不在里面。新电脑上：
+
+1. **安装 Node.js**：https://nodejs.org 下载 LTS 版，一路下一步
+2. 打开 **PowerShell** 执行：
+   ```powershell
+   cd D:\
+   mkdir dsh-app
+   cd dsh-app
+   npm init -y
+   npm install @deepseek-ai/dsh --registry=https://registry.npmmirror.com
+   ```
+3. 启动「DeepSeek Harness」——检测到缺少运行环境时，会弹出**应用内引导页**（同样的步骤 + 一键复制命令 + API Key 填写框）
+4. 在 https://platform.deepseek.com →「API Keys」→「创建新密钥」复制 Key，粘贴保存后点**重新检测**
+
+不需要手动改配置文件——壳默认读取 `D:\dsh-app`、`D:\dsh-data`，开箱即用。
+
+## 安全性
+
+你的 API Key 使用 **Windows 系统级加密（DPAPI / safeStorage）** 加密存储在你的用户目录，只通过环境变量注入**本地** dsh 进程：
+
+- 🔒 无网络调用、无云同步、不写日志
+- 🔒 存储代码完全开源——见 `main.js`（`writeSettings` / `readSettings`），引导页「安全」区块直接展示这段后端代码
+- 🔒 开启 `contextIsolation`，引导页只能调用三个白名单 IPC（保存 Key / 读取状态 / 重启）
+
 ## 源码构建
 
 ```powershell
