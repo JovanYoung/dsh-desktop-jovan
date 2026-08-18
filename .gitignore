@@ -1,0 +1,8 @@
+node_modules/
+dist/
+tools/
+*.log
+_*.txt
+
+# Local user config (contains personal paths) - never commit
+config.json
